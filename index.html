@@ -1,0 +1,413 @@
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kelola Produk - Toko Mas Axel</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f5f6fa;
+            color: #222;
+        }
+
+        .wrap {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 24px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        nav {
+            margin-bottom: 16px;
+        }
+
+        nav a {
+            margin-right: 12px;
+            color: #0b5ed7;
+        }
+
+        form, .baris {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        input, select, button {
+            padding: 8px 10px;
+            font-size: 15px;
+            border: 1px solid #aaa;
+            border-radius: 6px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #eee;
+        }
+
+        button:hover {
+            background: #ddd;
+        }
+
+        button.utama {
+            background: #0b5ed7;
+            color: #fff;
+            border-color: #0b5ed7;
+        }
+
+        button.bahaya {
+            background: #dc3545;
+            color: #fff;
+            border-color: #dc3545;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        td.angka, th.angka {
+            text-align: right;
+        }
+
+        #pesan {
+            min-height: 1.4em;
+            font-weight: bold;
+        }
+
+        .ok {
+            color: #198754;
+        }
+
+        .err {
+            color: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="wrap">
+
+        <h1>Toko Mas Axel - Kelola Produk</h1>
+
+        <nav>
+            <a href="index.html">Admin</a>
+            <a href="beli.html">Halaman Pembeli</a>
+        </nav>
+
+        <form id="formProduk">
+
+            <input
+                id="kode"
+                placeholder="Kode Produk"
+                required
+            >
+
+            <input
+                id="nama"
+                placeholder="Nama Produk"
+                required
+            >
+
+            <input
+                id="harga"
+                type="number"
+                min="0"
+                placeholder="Harga"
+                required
+            >
+
+            <input
+                id="stock"
+                type="number"
+                min="0"
+                placeholder="Stok"
+                required
+            >
+
+            <button
+                type="submit"
+                id="btnSimpan"
+                class="utama"
+            >
+                Simpan
+            </button>
+
+            <button
+                type="button"
+                id="btnBatal"
+            >
+                Batal
+            </button>
+
+        </form>
+
+        <p id="pesan" role="status"></p>
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Kode</th>
+                    <th>Nama Produk</th>
+                    <th class="angka">Harga</th>
+                    <th class="angka">Stok</th>
+                    <th>Aksi</th>
+                </tr>
+            </thead>
+
+            <tbody id="dataProduk"></tbody>
+
+        </table>
+
+    </div>
+
+    <script>
+        const API = '/api/barang';
+
+        const $ = id => document.getElementById(id);
+
+        let kodeEdit = null;
+
+        const form = $('formProduk');
+        const tabel = $('dataProduk');
+        const pesan = $('pesan');
+
+        const rupiah = n =>
+            'Rp ' + Number(n).toLocaleString('id-ID');
+
+
+        function tampilPesan(teks, error = false) {
+            pesan.textContent = teks;
+            pesan.className = error ? 'err' : 'ok';
+        }
+
+
+        // GET - Ambil semua produk
+        async function muatData() {
+            try {
+                const res = await fetch(API);
+
+                if (!res.ok) {
+                    throw new Error('Gagal mengambil data');
+                }
+
+                const data = await res.json();
+
+                tampilkanTabel(data);
+
+            } catch (err) {
+                tampilPesan(err.message, true);
+            }
+        }
+
+
+        // Tampilkan data produk ke tabel
+        function tampilkanTabel(data) {
+            tabel.replaceChildren();
+
+            if (data.length === 0) {
+                const tr = document.createElement('tr');
+                const td = document.createElement('td');
+
+                td.colSpan = 5;
+                td.textContent = 'Belum ada produk';
+
+                tr.appendChild(td);
+                tabel.appendChild(tr);
+
+                return;
+            }
+
+            data.forEach(p => {
+                const tr = document.createElement('tr');
+
+                [p.kode, p.nama, rupiah(p.harga), p.stock]
+                    .forEach((nilai, i) => {
+                        const td = document.createElement('td');
+
+                        td.textContent = nilai;
+
+                        if (i >= 2) {
+                            td.className = 'angka';
+                        }
+
+                        tr.appendChild(td);
+                    });
+
+                const aksi = document.createElement('td');
+
+                const edit = document.createElement('button');
+
+                edit.textContent = 'Edit';
+                edit.onclick = () => mulaiEdit(p);
+
+                const hapus = document.createElement('button');
+
+                hapus.textContent = 'Hapus';
+                hapus.className = 'bahaya';
+                hapus.onclick = () => hapusData(p.kode, p.nama);
+
+                aksi.append(edit, ' ', hapus);
+
+                tr.appendChild(aksi);
+                tabel.appendChild(tr);
+            });
+        }
+
+
+        // POST / PUT - Simpan atau perbarui produk
+        async function simpanData(data) {
+            try {
+                const url = kodeEdit
+                    ? API + '/' + encodeURIComponent(kodeEdit)
+                    : API;
+
+                const res = await fetch(url, {
+                    method: kodeEdit ? 'PUT' : 'POST',
+
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+
+                    body: JSON.stringify(data)
+                });
+
+                const hasil = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    throw new Error(
+                        hasil.pesan || 'Gagal menyimpan data'
+                    );
+                }
+
+                batalEdit();
+
+                await muatData();
+
+                tampilPesan('Data berhasil disimpan');
+
+            } catch (err) {
+                tampilPesan(err.message, true);
+            }
+        }
+
+
+        // Masuk ke mode edit
+        function mulaiEdit(p) {
+            kodeEdit = p.kode;
+
+            $('kode').value = p.kode;
+            $('kode').disabled = true;
+
+            $('nama').value = p.nama;
+            $('harga').value = p.harga;
+            $('stock').value = p.stock;
+
+            $('btnSimpan').textContent = 'Perbarui';
+        }
+
+
+        // Batalkan edit dan kosongkan form
+        function batalEdit() {
+            kodeEdit = null;
+
+            form.reset();
+
+            $('kode').disabled = false;
+            $('btnSimpan').textContent = 'Simpan';
+        }
+
+
+        // DELETE - Hapus produk
+        async function hapusData(kode, nama) {
+            if (!confirm('Hapus produk ' + nama + ' (' + kode + ')?')) {
+                return;
+            }
+
+            try {
+                const res = await fetch(
+                    API + '/' + encodeURIComponent(kode),
+                    {
+                        method: 'DELETE'
+                    }
+                );
+
+                const hasil = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    throw new Error(
+                        hasil.pesan || 'Gagal menghapus'
+                    );
+                }
+
+                if (kodeEdit === kode) {
+                    batalEdit();
+                }
+
+                await muatData();
+
+                tampilPesan('Data berhasil dihapus');
+
+            } catch (err) {
+                tampilPesan(err.message, true);
+            }
+        }
+
+
+        // Event submit form
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const data = {
+                nama: $('nama').value.trim(),
+                harga: parseInt($('harga').value, 10),
+                stock: parseInt($('stock').value, 10)
+            };
+
+            if (!kodeEdit) {
+                data.kode = $('kode').value.trim();
+            }
+
+            await simpanData(data);
+        });
+
+
+        // Event tombol batal
+        $('btnBatal').addEventListener('click', batalEdit);
+
+
+        // Muat data saat halaman dibuka
+        muatData();
+
+    </script>
+
+</body>
+</html>

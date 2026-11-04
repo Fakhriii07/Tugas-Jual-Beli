@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Beli - Toko Maju Jaya</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f5f6fa;
+            color: #222;
+        }
+
+        .wrap {
+            max-width: 820px;
+            margin: 0 auto;
+            padding: 24px;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-top: 0;
+        }
+
+        nav {
+            margin-bottom: 16px;
+        }
+
+        nav a {
+            margin-right: 12px;
+            color: #0b5ed7;
+        }
+
+        form, .baris {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        input, select, button {
+            padding: 8px 10px;
+            font-size: 15px;
+            border: 1px solid #aaa;
+            border-radius: 6px;
+        }
+
+        button {
+            cursor: pointer;
+            background: #eee;
+        }
+
+        button:hover {
+            background: #ddd;
+        }
+
+        button.utama {
+            background: #0b5ed7;
+            color: #fff;
+            border-color: #0b5ed7;
+        }
+
+        button.bahaya {
+            background: #dc3545;
+            color: #fff;
+            border-color: #dc3545;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        th, td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        td.angka, th.angka {
+            text-align: right;
+        }
+
+        #pesan {
+            min-height: 1.4em;
+            font-weight: bold;
+        }
+
+        .ok {
+            color: #198754;
+        }
+
+        .err {
+            color: #dc3545;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="wrap">
+
+        <h1>Beli</h1>
+
+        <nav>
+            <a href="index.html">Admin</a>
+            <a href="beli.html">Halaman Pembeli</a>
+        </nav>
+
+        <div class="baris">
+            <select id="pilihBarang"></select>
+
+            <input
+                id="jumlah"
+                type="number"
+                min="1"
+                value="1"
+                placeholder="Jumlah"
+            >
+
+            <button id="btnBeli" class="utama">
+                Beli
+            </button>
+        </div>
+
+        <p id="info"></p>
+        <p id="pesan" role="status"></p>
+
+    </div>
+
+    <script>
+        const API = '/api/barang';
+
+        const $ = id => document.getElementById(id);
+
+        const pilih = $('pilihBarang');
+        const pesan = $('pesan');
+
+        const rupiah = n => 'Rp ' + Number(n).toLocaleString('id-ID');
+
+        let daftar = [];
+
+        function tampilPesan(teks, error = false) {
+            pesan.textContent = teks;
+            pesan.className = error ? 'err' : 'ok';
+        }
+
+        function tampilInfo() {
+            const barang = daftar.find(b => b.kode === pilih.value);
+
+            $('info').textContent = barang
+                ? 'Harga: ' + rupiah(barang.harga) +
+                  ' | Stok tersedia: ' + barang.stock
+                : '';
+        }
+
+        // GET /api/barang
+        async function muatBarang() {
+            const dipilih = pilih.value;
+
+            const res = await fetch(API);
+
+            if (!res.ok) {
+                throw new Error('Gagal mengambil data barang');
+            }
+
+            daftar = await res.json();
+
+            pilih.replaceChildren();
+
+            daftar.forEach(barang => {
+                const opt = document.createElement('option');
+
+                opt.value = barang.kode;
+                opt.textContent = barang.nama +
+                    (barang.stock === 0 ? ' (habis)' : '');
+
+                pilih.appendChild(opt);
+            });
+
+            if (dipilih && daftar.some(b => b.kode === dipilih)) {
+                pilih.value = dipilih;
+            }
+
+            tampilInfo();
+        }
+
+        async function beli() {
+            try {
+                const jumlah = parseInt($('jumlah').value, 10) || 1;
+
+                if (jumlah < 1) {
+                    throw new Error('Jumlah minimal 1');
+                }
+
+                if (!pilih.value) {
+                    throw new Error('Pilih barang terlebih dahulu');
+                }
+
+                // 1. Cek stok terbaru dari server
+                const resCek = await fetch(
+                    API + '/' + encodeURIComponent(pilih.value)
+                );
+
+                if (!resCek.ok) {
+                    throw new Error('Barang tidak ditemukan');
+                }
+
+                const barang = await resCek.json();
+
+                if (barang.stock < jumlah) {
+                    await muatBarang();
+
+                    throw new Error(
+                        barang.stock === 0
+                            ? 'Maaf, stok ' + barang.nama + ' habis'
+                            : 'Stok ' + barang.nama +
+                              ' hanya tersisa ' + barang.stock
+                    );
+                }
+
+                // 2. Hitung stok baru
+                const stockBaru = barang.stock - jumlah;
+
+                // 3. PUT /api/barang/:id
+                const res = await fetch(
+                    API + '/' + encodeURIComponent(barang.kode),
+                    {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            stock: stockBaru
+                        })
+                    }
+                );
+
+                const hasil = await res.json().catch(() => ({}));
+
+                if (!res.ok) {
+                    throw new Error(hasil.pesan || 'Transaksi gagal');
+                }
+
+                // 4. Perbarui daftar barang
+                await muatBarang();
+
+                // 5. Tampilkan hasil transaksi
+                tampilPesan(
+                    'Berhasil membeli ' + jumlah + ' ' + barang.nama +
+                    ' (total ' + rupiah(barang.harga * jumlah) +
+                    '). Sisa stok: ' + stockBaru
+                );
+
+            } catch (err) {
+                tampilPesan(err.message, true);
+            }
+        }
+
+        // Event listener
+        pilih.addEventListener('change', tampilInfo);
+
+        $('btnBeli').addEventListener('click', beli);
+
+        // Muat barang saat halaman dibuka
+        muatBarang().catch(err => tampilPesan(err.message, true));
+
+    </script>
+
+</body>
+</html>
